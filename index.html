@@ -1537,7 +1537,13 @@ header .room-actions .site-list-btn{
 
 
 /* v2.4.27 糊付け：現場合計・残りm数＋途中枚数 */
-.glue-summary{display:flex;gap:10px;align-items:stretch;min-width:0}
+.glue-summary{display:flex;gap:10px;align-items:stretch;min-width:0;flex:1;overflow:hidden}
+.glue-summary-fixed{display:grid;grid-template-rows:repeat(2,minmax(0,1fr));gap:8px;flex:0 0 138px}
+.glue-summary-fixed .glue-summary-box{min-width:0;width:100%}
+.glue-product-scroll{min-width:0;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;padding-bottom:3px}
+.glue-product-columns{display:flex;gap:8px;width:max-content;min-width:100%}
+.glue-product-column{display:grid;grid-template-rows:repeat(2,minmax(0,1fr));gap:8px;flex:0 0 150px}
+.glue-product-column .glue-summary-box{width:150px}
 .glue-summary-box{
   min-width:150px;background:#f1edea;border-radius:12px;
   padding:9px 13px;display:flex;flex-direction:column;gap:2px
@@ -1558,8 +1564,11 @@ header .room-actions .site-list-btn{
 .glue-row.partial .glue-check::after{content:"•";font-size:25px;line-height:1}
 @media(max-width:600px){
   .glue-page-top{align-items:flex-start;flex-wrap:wrap}
-  .glue-summary{width:100%}
-  .glue-summary-box{min-width:0;flex:1;padding:8px 10px}
+  .glue-summary{width:100%;flex:1 1 100%}
+  .glue-summary-fixed{flex-basis:112px}
+  .glue-product-column{flex-basis:132px}
+  .glue-product-column .glue-summary-box{width:132px}
+  .glue-summary-box{min-width:0;padding:8px 10px}
   .glue-summary-box strong{font-size:18px}
   .glue-row{
     grid-template-columns:34px minmax(72px,1fr) 18px minmax(72px,1fr) 32px!important
@@ -4583,19 +4592,27 @@ function setGlueDoneQty(checks,key,qty,totalQty){
 function glueSummary(siteObj=state){
   const checks=ensureGlueChecks(siteObj);
   let totalM=0,doneM=0;
+  const byProduct=new Map();
   glueUsefulRooms(siteObj).forEach(r=>(r.sections||[]).forEach(sec=>{
     const rv=effectiveWallRepeatV(sec,siteObj);
+    const product=String(effectiveWallProduct(sec,siteObj)||"").trim()||"品番未入力";
+    if(!byProduct.has(product))byProduct.set(product,{product,totalM:0,doneM:0,remainingM:0});
+    const ps=byProduct.get(product);
     (sec.measures||[]).forEach(m=>{
       if(!String(m.value||"").trim())return;
       const c=calc(m.value,rv);if(!c)return;
-      totalM+=c.withM;
       const key=glueMeasureKey(r,sec,m);
       const doneQty=glueDoneQty(checks,key,c.qty);
-      doneM+=(c.each*doneQty)/100;
+      const measureDoneM=(c.each*doneQty)/100;
+      totalM+=c.withM;
+      doneM+=measureDoneM;
+      ps.totalM+=c.withM;
+      ps.doneM+=measureDoneM;
     });
   }));
   const remainingM=Math.max(0,totalM-doneM);
-  return {totalM,doneM,remainingM};
+  const products=[...byProduct.values()].map(x=>({...x,remainingM:Math.max(0,x.totalM-x.doneM)}));
+  return {totalM,doneM,remainingM,products};
 }
 function refreshGlueSummary(wrap){
   const s=glueSummary(state);
@@ -4638,7 +4655,8 @@ function renderGluePage(){
   const summary=glueSummary(state);
   const wrap=document.createElement("div");
   wrap.className="glue-page";
-  wrap.innerHTML=`<div class="glue-page-top"><div class="glue-summary"><div class="glue-summary-box"><span>現場合計</span><strong class="glue-total-m">${fmt(summary.totalM)}</strong></div><div class="glue-summary-box"><span>残り</span><strong class="glue-remaining-m">${fmt(summary.remainingM)}</strong></div></div><button type="button" class="glue-page-reset">チェックを全解除</button></div><div class="glue-room-list"></div>`;
+  const productSummaryHtml=(summary.products||[]).map(ps=>`<div class="glue-product-column"><div class="glue-summary-box"><span>${esc(ps.product)} 合計</span><strong>${fmt(ps.totalM)}</strong></div><div class="glue-summary-box"><span>${esc(ps.product)} 残り</span><strong>${fmt(ps.remainingM)}</strong></div></div>`).join("");
+  wrap.innerHTML=`<div class="glue-page-top"><div class="glue-summary"><div class="glue-summary-fixed"><div class="glue-summary-box"><span>現場合計</span><strong class="glue-total-m">${fmt(summary.totalM)}</strong></div><div class="glue-summary-box"><span>残り</span><strong class="glue-remaining-m">${fmt(summary.remainingM)}</strong></div></div><div class="glue-product-scroll"><div class="glue-product-columns">${productSummaryHtml}</div></div></div><button type="button" class="glue-page-reset">チェックを全解除</button></div><div class="glue-room-list"></div>`;
   wrap.querySelector(".glue-page-reset").onclick=()=>{
     if(!confirm("糊付けのチェック・途中枚数をすべて0に戻しますか？"))return;
     state.glueChecks={};save();renderGluePage();
