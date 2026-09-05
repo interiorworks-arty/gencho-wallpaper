@@ -1478,7 +1478,9 @@ header .room-actions .site-list-btn{
 /* v2.4.26 糊付けページ */
 .work-page-tabs{grid-template-columns:repeat(9,minmax(0,1fr))!important}
 .glue-page{background:#fff;border-radius:16px;padding:14px;margin-bottom:14px}
-.glue-page-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.glue-page-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;position:sticky;top:92px;z-index:8;background:rgba(255,255,255,.97);backdrop-filter:blur(8px);padding:8px 0 10px;border-bottom:1px solid #eee7e2}
+.glue-page{--glue-sticky-height:132px}
+.glue-room-title{top:calc(92px + var(--glue-sticky-height) + 4px)!important}
 .glue-page-title{font-size:21px;font-weight:900;color:var(--ink)}
 .glue-page-reset{
   border:0;border-radius:10px;background:#eeeae7;color:#665e58;
@@ -1596,7 +1598,7 @@ header .room-actions .site-list-btn{
 @media(max-width:560px){.work-page-tabs{grid-template-columns:repeat(3,minmax(0,1fr))!important}.work-page-tabs button{font-size:11px!important}}
 </style>
 </head>
-<body data-build="wall-v1.0.0">
+<body data-build="wall-v1.0.2">
 <header><div class="header-row"><div><div class="title">クロス屋</div><div class="tag">クロス職人の現調・糊付け・発注。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -4657,6 +4659,15 @@ function renderGluePage(){
   wrap.className="glue-page";
   const productSummaryHtml=(summary.products||[]).map(ps=>`<div class="glue-product-column"><div class="glue-summary-box"><span>${esc(ps.product)} 合計</span><strong>${fmt(ps.totalM)}</strong></div><div class="glue-summary-box"><span>${esc(ps.product)} 残り</span><strong>${fmt(ps.remainingM)}</strong></div></div>`).join("");
   wrap.innerHTML=`<div class="glue-page-top"><div class="glue-summary"><div class="glue-summary-fixed"><div class="glue-summary-box"><span>現場合計</span><strong class="glue-total-m">${fmt(summary.totalM)}</strong></div><div class="glue-summary-box"><span>残り</span><strong class="glue-remaining-m">${fmt(summary.remainingM)}</strong></div></div><div class="glue-product-scroll"><div class="glue-product-columns">${productSummaryHtml}</div></div></div><button type="button" class="glue-page-reset">チェックを全解除</button></div><div class="glue-room-list"></div>`;
+  const glueTop=wrap.querySelector(".glue-page-top");
+  const syncGlueStickyHeight=()=>{
+    if(glueTop)wrap.style.setProperty("--glue-sticky-height",`${Math.ceil(glueTop.getBoundingClientRect().height)}px`);
+  };
+  requestAnimationFrame(syncGlueStickyHeight);
+  if(typeof ResizeObserver!=="undefined"&&glueTop){
+    const glueStickyObserver=new ResizeObserver(syncGlueStickyHeight);
+    glueStickyObserver.observe(glueTop);
+  }
   wrap.querySelector(".glue-page-reset").onclick=()=>{
     if(!confirm("糊付けのチェック・途中枚数をすべて0に戻しますか？"))return;
     state.glueChecks={};save();renderGluePage();
