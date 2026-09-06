@@ -1596,6 +1596,49 @@ header .room-actions .site-list-btn{
 .work-page-tabs{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:6px!important}
 .work-page-tabs button{font-size:12px!important;padding:10px 5px!important}
 @media(max-width:560px){.work-page-tabs{grid-template-columns:repeat(3,minmax(0,1fr))!important}.work-page-tabs button{font-size:11px!important}}
+
+
+/* v2.4.41 / v1.0.3 糊付け集計：固定エリアを約65%の高さにコンパクト化 */
+.glue-page-top{
+  gap:7px;
+  margin-bottom:8px;
+  padding:3px 0 4px;
+}
+.glue-summary{gap:7px}
+.glue-summary-fixed{gap:4px}
+.glue-product-columns{gap:6px}
+.glue-product-column{gap:4px}
+.glue-summary-box{
+  padding:3px 9px;
+  border-radius:10px;
+  gap:0;
+}
+.glue-summary-box span{font-size:9px;line-height:1.1}
+.glue-summary-box strong{font-size:16px;line-height:1.15}
+.glue-page-reset{
+  padding:5px 8px;
+  border-radius:8px;
+  font-size:10px;
+  line-height:1.1;
+}
+@media(max-width:600px){
+  .glue-page-top{
+    align-items:center;
+    flex-wrap:nowrap;
+    gap:5px;
+    margin-bottom:6px;
+    padding:3px 0 4px;
+  }
+  .glue-summary{width:auto;flex:1 1 auto;gap:5px}
+  .glue-summary-fixed{flex-basis:94px;gap:4px}
+  .glue-product-columns{gap:5px}
+  .glue-product-column{flex-basis:112px;gap:4px}
+  .glue-product-column .glue-summary-box{width:112px}
+  .glue-summary-box{padding:3px 7px;border-radius:9px}
+  .glue-summary-box span{font-size:8.5px}
+  .glue-summary-box strong{font-size:15px}
+  .glue-page-reset{flex:0 0 auto;max-width:72px;padding:5px 6px;font-size:9px;white-space:normal}
+}
 </style>
 </head>
 <body data-build="wall-v1.0.2">
