@@ -1,4 +1,4 @@
-const CACHE="gencho-wall-v102-glue-sticky-summary-v1";
+const CACHE="gencho-wall-v105-selfcheck";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{

@@ -2509,10 +2509,18 @@ function syncGenericNumber(){
   save();if(typeof activeGenericUpdate==="function")activeGenericUpdate();
 }
 
+let forceMeasureKeypadBottomRight=true;
+function resetMeasureKeypadBottomRight(){
+  keypadLayout=null;
+  forceMeasureKeypadBottomRight=true;
+  try{localStorage.removeItem(KEYPAD_PREF_KEY)}catch{}
+}
 function ensureMeasureKeypadDefaultBottomRight(){
   const kp=$("#measureKeypad");if(!kp)return;
-  keypadLayout=null;
-  try{localStorage.removeItem(KEYPAD_PREF_KEY)}catch{}
+  if(forceMeasureKeypadBottomRight){
+    keypadLayout=null;
+    forceMeasureKeypadBottomRight=false;
+  }
 }
 
 function hideMeasureKeypad(){
@@ -6487,7 +6495,7 @@ function addRoomFromSharedChoice(name){
     if(!fr.pages.includes(finishRoomPageTarget))fr.pages.push(finishRoomPageTarget);
     save();$("#roomSheet").classList.remove("show");renderFinishPage();return;
   }
-  let r=newRoom(n);state.rooms.push(r);activeRoom=r.id;save();$("#roomSheet").classList.remove("show");render();
+  let r=newRoom(n);state.rooms.push(r);activeRoom=r.id;resetMeasureKeypadBottomRight();save();$("#roomSheet").classList.remove("show");render();
 }
 function openSharedRoomSheet(mode="wall",page="floor"){
   roomSheetMode=mode;finishRoomPageTarget=page;manageRooms=false;
@@ -6914,7 +6922,7 @@ function bindWorkPageTouchSortFallback(){
 bindWorkPageTabs();
 bindWorkPageTouchSortFallback();
 setWorkPage(activeWorkPage);
-render();if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
+resetMeasureKeypadBottomRight();render();if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
 
 /* ===== v1.9.0 メモ図面フルスクリーンエディタ ===== */
 let memoEditorFiles=[];
