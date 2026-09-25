@@ -1672,10 +1672,10 @@ header .room-actions .site-list-btn{
   .glue-summary-box strong{font-size:15px}
   .glue-page-reset{flex:0 0 auto;max-width:72px;padding:5px 6px;font-size:9px;white-space:normal}
 }
-/* v1.0.6 公開版：統合版の部屋別①〜⑩・品番未定発注・集計出力を同期 */
+/* v1.0.7 公開前整理：クロス・糊付け・発注に限定し、不要な公開UI依存を整理 */
 </style>
 </head>
-<body data-build="wall-v1.0.6">
+<body data-build="wall-v1.0.7">
 <header><div class="header-row"><div><div class="title">クロス屋</div><div class="tag">クロス職人の現調・糊付け・発注。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1697,18 +1697,6 @@ header .room-actions .site-list-btn{
   </div>
   <div id="roomTabs" class="tabs"></div>
   <div id="roomArea"></div>
-</div>
-<div id="finishWorkPage" class="work-page">
-  <div id="finishPageArea"></div>
-</div>
-<div id="photoWorkPage" class="work-page">
-  <div id="photoPageArea"></div>
-</div>
-<div id="memoWorkPage" class="work-page">
-  <div id="memoPageArea"></div>
-</div>
-<div id="drawingWorkPage" class="work-page">
-  <div id="drawingPageArea"></div>
 </div>
 <div id="glueWorkPage" class="work-page">
   <div id="gluePageArea"></div>
@@ -1804,11 +1792,6 @@ header .room-actions .site-list-btn{
     </div>
   </div>
 </div>
-<input id="photoCameraInput" class="photo-hidden-input" type="file" accept="image/*" capture="environment">
-<input id="videoCameraInput" class="photo-hidden-input" type="file" accept="video/*" capture="environment">
-<input id="photoLibraryInput" class="photo-hidden-input" type="file" accept="image/*,video/*" multiple>
-<input id="memoDrawingInput" class="photo-hidden-input" type="file" accept="image/*,application/pdf,.pdf" multiple>
-<div id="photoLightbox" class="photo-lightbox"><button type="button" id="photoLightboxClose" class="photo-lightbox-close">×</button><img id="photoLightboxImage" alt=""><video id="photoLightboxVideo" controls playsinline style="display:none"></video></div>
 <div class="bottom"><div class="bottom-inner"><button id="editBtn" class="primary">採寸</button><button id="calcBtn">計算</button></div></div>
 
 
@@ -1910,7 +1893,6 @@ header .room-actions .site-list-btn{
     </div>
   </div>
 </div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 const KEY="gencho-wall-v03-data",SITES_KEY="gencho-wall-sites-v1",CURRENT_SITE_KEY="gencho-wall-current-site-v1",ROOM_NAMES=["玄関","廊下","洗面所","トイレ","洋室1","洋室2","洋室3","和室","キッチン","リビング","LDK","収納","WIC","SC","パントリー","階段","2階廊下"],CATS=["天","ハリ","壁","下り天","AW","CB","腰上","腰下","階段外周り","階段内周り"],$=s=>document.querySelector(s);
 
@@ -1919,7 +1901,7 @@ function localDateYmd(d=new Date()){
   return `${y}-${m}-${day}`;
 }
 function makeSite(name=""){
-  return {id:"site-"+Date.now()+"-"+Math.random().toString(36).slice(2,8),siteName:name,siteDate:localDateYmd(),rooms:[],finishRooms:[],memo:"",memoPages:[],glueChecks:{},status:"active",createdAt:Date.now(),updatedAt:Date.now()}
+  return {id:"site-"+Date.now()+"-"+Math.random().toString(36).slice(2,8),siteName:name,siteDate:localDateYmd(),rooms:[],glueChecks:{},status:"active",createdAt:Date.now(),updatedAt:Date.now()}
 }
 function loadSites(){
   try{
@@ -3786,134 +3768,6 @@ function collectOrderData(siteObj=state){
       qtyText:`${orderFmtNum(orderValue)}m`,hasOverride:!!hasOverride};
   });
 
-  ensureFinishRooms(siteObj);
-  const finishMap={floor:new Map(),sheet:new Map(),other:new Map()};
-
-  (siteObj.finishRooms||[]).forEach(r=>(r.finishMaterials||[]).forEach(item=>{
-    const kind=item.kind||item.type;
-    const rawId=orderDisplayIdentity(item);
-    const hasQty=orderItemHasQuantity(item);
-    const id=rawId
-      ? {name:rawId.name||kind||"商品",product:rawId.product||(hasQty?"品番未定":"")}
-      : (hasQty?{name:kind||"商品",product:"品番未定"}:null);
-    if(!id)return;
-    const page=item.page||finishPageFromKind(kind);
-    if(!finishMap[page])return;
-    let mode="qty", keyExtra="", qtyNum=0, unit="", detail="", cuts=[];
-
-    if(kind==="CF"||kind==="リアテック"||kind==="ダイノック"){
-      mode="cuts";
-      cuts=(item.orderCuts||[]).filter(x=>(Number(x.length)||0)>0&&(Number(x.count)||0)>0);
-      keyExtra="cuts";
-      detail=cuts.length?cuts.map(x=>`${orderFmtNum(x.length)}${x.lengthUnit||"m"}×${orderFmtNum(x.count)}${x.countUnit||"本"}`).join(" / "):"発注寸法未入力";
-    }else if(kind==="フロアタイル"){
-      if(item.saleMode==="loose"){
-        mode="qty";qtyNum=Number(item.pieces)||0;unit="枚";keyExtra="loose";
-      }else{
-        mode="tilecase";
-        const area=Number(item.area)||0,per=Number(item.caseSqm)||0;
-        qtyNum=area;unit="㎡";keyExtra=`case:${per}`;
-        detail=per?`1ケース ${orderFmtNum(per)}㎡`:"1ケース㎡数 未入力";
-      }
-    }else if(kind==="ソフト巾木"){
-      mode="basecase";
-      qtyNum=Number(item.qty)||0;unit="m";
-      const per=Number(item.caseMeters)||0;keyExtra=`base:${per}`;
-      detail=per?`1ケース ${orderFmtNum(per)}m`:"1ケースm数 未入力";
-    }else{
-      const enteredCuts=(item.orderCuts||[]).filter(x=>(Number(x.length)||0)>0||(Number(x.count)||0)>0);
-      if(enteredCuts.length){
-        mode="cuts";cuts=enteredCuts;keyExtra="cuts";
-        detail=enteredCuts.map(x=>{
-          const len=Number(x.length)||0,count=Number(x.count)||0;
-          const cu=x.countUnit||"本";return len>0&&count>0?`${orderFmtNum(len)}${x.lengthUnit||"m"}×${orderFmtNum(count)}${cu}`:count>0?`${orderFmtNum(count)}${cu}`:`${orderFmtNum(len)}${x.lengthUnit||"m"}`;
-        }).join(" / ");
-      }else{
-        mode="qty";qtyNum=Number(item.qty)||0;unit=String(item.unit||"").trim()||"";
-        keyExtra=`qty:${unit}`;
-      }
-    }
-
-    const key=[id.name,id.product,item.type||"",keyExtra].join("|").toLowerCase();
-    if(!finishMap[page].has(key)){
-      finishMap[page].set(key,{...id,type:item.type||"",mode,keyExtra,orderKey:`${page}|${key}`,qtyNum:0,unit,detail:"",cuts:[],rooms:[]});
-    }
-    const g=finishMap[page].get(key);
-    g.rooms.push(r.name);
-
-    if(mode==="cuts"){
-      cuts.forEach(c=>{
-        const len=Number(c.length)||0,count=Number(c.count)||0;
-        if(count<=0)return;
-        const lengthUnit=c.lengthUnit||"m",countUnit=c.countUnit||"本";
-        let row=g.cuts.find(x=>Math.abs((Number(x.length)||0)-len)<1e-9&&(x.lengthUnit||"m")===lengthUnit&&(x.countUnit||"本")===countUnit);
-        if(!row){row={length:len,lengthUnit,count:0,countUnit};g.cuts.push(row)}
-        row.count+=count;
-      });
-    }else{
-      g.qtyNum+=qtyNum;
-    }
-
-    if(mode==="tilecase"){
-      const per=Number(item.caseSqm)||0;
-      g.casePer=per;
-    }else if(mode==="basecase"){
-      const per=Number(item.caseMeters)||0;
-      g.casePer=per;
-    }
-  }));
-
-  ["floor","sheet","other"].forEach(page=>{
-    groups[page]=[...finishMap[page].values()].map(g=>{
-      let qtyText="",detail=g.detail||"",autoQtyText="",orderValue=null,autoOrderValue=null,orderUnit="",hasOverride=false;
-      const ov=orderOverrideFor(siteObj,g.orderKey);
-
-      if(g.mode==="cuts"){
-        detail="";
-        g.cuts.sort((a,b)=>(Number(a.length)||0)-(Number(b.length)||0));
-        g.cuts=g.cuts.map(x=>{
-          const sig=orderCutSig(x),autoCount=Number(x.count)||0,autoLength=Number(x.length)||0;
-          const rawCount=ov?.cutCounts?.[sig],rawLength=ov?.cutLengths?.[sig];
-          const countChanged=rawCount!==undefined&&String(rawCount).trim()!=="";
-          const lengthChanged=rawLength!==undefined&&String(rawLength).trim()!=="";
-          const orderCount=countChanged?(Number(rawCount)||0):autoCount;
-          const orderLength=lengthChanged?(Number(rawLength)||0):autoLength;
-          if(countChanged||lengthChanged)hasOverride=true;
-          return {...x,sig,autoCount,autoLength,orderCount,orderLength,countChanged,lengthChanged,changed:countChanged||lengthChanged};
-        });
-        autoQtyText=g.cuts.length?g.cuts.map(x=>{
-          const len=Number(x.autoLength)||0,cu=x.countUnit||"本";
-          return len>0?`${orderFmtNum(len)}${x.lengthUnit||"m"}×${orderFmtNum(x.autoCount)}${cu}`:`${orderFmtNum(x.autoCount)}${cu}`;
-        }).join(" / "):"発注数量未入力";
-        qtyText=g.cuts.length?g.cuts.map(x=>{
-          const len=Number(x.orderLength)||0,cu=x.countUnit||"本";
-          return len>0?`${orderFmtNum(len)}${x.lengthUnit||"m"}×${orderFmtNum(x.orderCount)}${cu}`:`${orderFmtNum(x.orderCount)}${cu}`;
-        }).join(" / "):"発注数量未入力";
-      }else if(g.mode==="tilecase"){
-        autoOrderValue=g.casePer>0&&g.qtyNum>0?Math.ceil(g.qtyNum/g.casePer):0;orderUnit="ケース";
-        const raw=ov?.qty;hasOverride=raw!==undefined&&String(raw).trim()!=="";
-        orderValue=hasOverride?(Number(raw)||0):autoOrderValue;
-        autoQtyText=autoOrderValue>0?`${orderFmtNum(autoOrderValue)}ケース`:"発注数量未入力";
-        qtyText=orderValue>0?`${orderFmtNum(orderValue)}ケース`:"発注数量未入力";
-        detail=`施工 ${orderFmtNum(g.qtyNum)}㎡${g.casePer?` / 1ケース ${orderFmtNum(g.casePer)}㎡`:""}`;
-      }else if(g.mode==="basecase"){
-        autoOrderValue=g.casePer>0&&g.qtyNum>0?Math.ceil(g.qtyNum/g.casePer):0;orderUnit="ケース";
-        const raw=ov?.qty;hasOverride=raw!==undefined&&String(raw).trim()!=="";
-        orderValue=hasOverride?(Number(raw)||0):autoOrderValue;
-        autoQtyText=autoOrderValue>0?`${orderFmtNum(autoOrderValue)}ケース`:"発注数量未入力";
-        qtyText=orderValue>0?`${orderFmtNum(orderValue)}ケース`:"発注数量未入力";
-        detail=`採寸 ${orderFmtNum(g.qtyNum)}m${g.casePer?` / 1ケース ${orderFmtNum(g.casePer)}m`:""}`;
-      }else{
-        autoOrderValue=Number(g.qtyNum)||0;orderUnit=g.unit||"";
-        const raw=ov?.qty;hasOverride=raw!==undefined&&String(raw).trim()!=="";
-        orderValue=hasOverride?(Number(raw)||0):autoOrderValue;
-        autoQtyText=autoOrderValue>0?`${orderFmtNum(autoOrderValue)}${orderUnit}`:"数量未入力";
-        qtyText=orderValue>0?`${orderFmtNum(orderValue)}${orderUnit}`:"数量未入力";
-      }
-      return {...g,qtyText,autoQtyText,detail,orderValue,autoOrderValue,orderUnit,hasOverride};
-    });
-  });
-
   return groups;
 }
 function renderOrderPage(){
@@ -4828,23 +4682,16 @@ function renderGluePage(){
 }
 
 function setWorkPage(page){
+  if(!["wall","glue","order"].includes(page))page="wall";
   activeWorkPage=page;
   document.querySelectorAll("[data-work-page]").forEach(b=>b.classList.toggle("active",b.dataset.workPage===page));
   $("#wallWorkPage").classList.toggle("active",page==="wall");
-  $("#finishWorkPage").classList.toggle("active",["floor","sheet","other"].includes(page));
-  $("#photoWorkPage").classList.toggle("active",page==="photo");
-  $("#memoWorkPage").classList.toggle("active",page==="memo");
-  $("#drawingWorkPage").classList.toggle("active",page==="drawing");
   $("#glueWorkPage").classList.toggle("active",page==="glue");
   $("#orderWorkPage").classList.toggle("active",page==="order");
   hideMeasureKeypad();hideProductKeypad();
   if(page==="wall"){renderTabs();renderRoom()}
-  else if(page==="photo")renderPhotoPage();
-  else if(page==="memo")renderMemoPage();
-  else if(page==="drawing")renderDrawingPage();
   else if(page==="glue")renderGluePage();
-  else if(page==="order")renderOrderPage();
-  else renderFinishPage();
+  else renderOrderPage();
   updateRoomSideNav();
 }
 
@@ -6625,14 +6472,13 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.29",exportedAt:new Date().toISOString(),
+    app:"クロス屋",version:"1.0.7",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
       savedRooms,deletedRooms,roomOrder,
       savedSections,deletedSections,sectionOrder,
-      savedProducts,recentProducts,
-      finishSavedProducts,finishFullProducts,finishRecentProducts,finishSavedItems,finishRecentItems,finishChoices,unitChoices
+      savedProducts,recentProducts
     }
   };
 }
@@ -6657,25 +6503,15 @@ function importBackupData(obj){
   sectionOrder=Array.isArray(m.sectionOrder)?m.sectionOrder:[...CATS];
   savedProducts=Array.isArray(m.savedProducts)?m.savedProducts:[];
   recentProducts=Array.isArray(m.recentProducts)?m.recentProducts:[];
-  finishSavedProducts=Array.isArray(m.finishSavedProducts)?m.finishSavedProducts:[];
-  finishFullProducts=Array.isArray(m.finishFullProducts)?m.finishFullProducts:[];
-  finishRecentProducts=Array.isArray(m.finishRecentProducts)?m.finishRecentProducts:[];
-  finishSavedItems=Array.isArray(m.finishSavedItems)?m.finishSavedItems:[];
-  finishRecentItems=Array.isArray(m.finishRecentItems)?m.finishRecentItems:[];
-  finishChoices=(Array.isArray(m.finishChoices)&&m.finishChoices.length?m.finishChoices:DEFAULT_FINISH_CHOICES).map(x=>normalizeFinishChoice({...x}));
-  unitChoices=Array.isArray(m.unitChoices)&&m.unitChoices.length?m.unitChoices:[...DEFAULT_UNITS];saveUnitChoices();
-  saveFinishChoices();
-  saveList(FINISH_PRODUCT_MASTER_KEY,finishSavedProducts);saveList(FINISH_FULL_PRODUCT_MASTER_KEY,finishFullProducts);saveList(FINISH_RECENT_PRODUCT_KEY,finishRecentProducts);
-  saveList(FINISH_ITEM_MASTER_KEY,finishSavedItems);saveList(FINISH_RECENT_ITEM_KEY,finishRecentItems);
   saveList(ROOM_MASTER_KEY,savedRooms);saveList(ROOM_DELETED_KEY,deletedRooms);saveRoomOrder();
   saveList(SECTION_MASTER_KEY,savedSections);saveList(SECTION_DELETED_KEY,deletedSections);saveSectionOrder();
   saveList(PRODUCT_MASTER_KEY,savedProducts);
-  state=sites.find(s=>s.id===obj.currentSiteId)||sites[0];ensureFinishRooms(state);currentSiteId=state.id;activeRoom=state.rooms[0]?.id||null;
+  state=sites.find(s=>s.id===obj.currentSiteId)||sites[0];currentSiteId=state.id;activeRoom=state.rooms[0]?.id||null;
   localStorage.setItem(SITES_KEY,JSON.stringify(sites));localStorage.setItem(CURRENT_SITE_KEY,state.id);localStorage.setItem(KEY,JSON.stringify(state));
   renderRoomChoices();renderSectionChoices();render();renderSiteList();
 }
 
-function render(){ensureGlueChecks(state);ensureWallCommonProduct(state);renderWallCommonProduct();bindWallCommonProductButton();bindWallCommonRepeatButtons();(state.rooms||[]).forEach(ensureRoomExtras);ensureFinishRooms(state);if(typeof state.memo!=="string")state.memo="";ensureMemoPages(state);ensureMemoInk(state);if(state.siteDate==null)state.siteDate="";const siteNameInput=$("#siteName"),siteDateInput=$("#siteDate");if(siteNameInput){siteNameInput.dataset.siteId=String(state.id||"");siteNameInput.value=state.siteName||""}if(siteDateInput){siteDateInput.dataset.siteId=String(state.id||"");siteDateInput.value=state.siteDate||""}if(activeWorkPage==="wall"){renderTabs();renderRoom()}else if(activeWorkPage==="photo"){renderPhotoPage()}else if(activeWorkPage==="memo"){renderMemoPage()}else if(activeWorkPage==="drawing"){renderDrawingPage()}else if(activeWorkPage==="glue"){renderGluePage()}else if(activeWorkPage==="order"){renderOrderPage()}else{renderFinishPage()}buildCalc()}
+function render(){ensureGlueChecks(state);ensureWallCommonProduct(state);renderWallCommonProduct();bindWallCommonProductButton();bindWallCommonRepeatButtons();(state.rooms||[]).forEach(ensureRoomExtras);if(state.siteDate==null)state.siteDate="";const siteNameInput=$("#siteName"),siteDateInput=$("#siteDate");if(siteNameInput){siteNameInput.dataset.siteId=String(state.id||"");siteNameInput.value=state.siteName||""}if(siteDateInput){siteDateInput.dataset.siteId=String(state.id||"");siteDateInput.value=state.siteDate||""}if(activeWorkPage==="wall"){renderTabs();renderRoom()}else if(activeWorkPage==="glue"){renderGluePage()}else{renderOrderPage()}buildCalc()}
 
 
 
@@ -6870,10 +6706,6 @@ updateSectionSheetMode();
 $("#manageSections").onclick=()=>{manageSections=!manageSections;renderSectionChoices()};
 $("#resetSections").onclick=()=>{if(confirm("区分候補を初期状態に戻しますか？\n入力済みの現場データは消えません。")){savedSections=[];deletedSections=[];sectionOrder=[...CATS];saveList(SECTION_MASTER_KEY,savedSections);saveList(SECTION_DELETED_KEY,deletedSections);saveSectionOrder();renderSectionChoices()}};
 $("#closeSection").onclick=()=>closeSectionSheet();$("#addCustomSection").onclick=()=>{let n=$("#customSection").value.trim(),r=room();if(n&&r){addUniqueText(SECTION_MASTER_KEY,savedSections,n);if(!sectionOrder.includes(n)){sectionOrder.push(n);saveSectionOrder()}renderSectionChoices();const editing=getEditingSection();if(editing){editing.name=n}else{r.sections.push(newSec(n))}$("#customSection").value="";save();closeSectionSheet();render()}};
-$("#photoCameraInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom,photoTargetStage)};
-$("#videoCameraInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom,photoTargetStage)};
-$("#photoLibraryInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom,photoTargetStage)};
-$("#memoDrawingInput").onchange=e=>{const files=e.target.files;if(files?.length&&memoDrawingTargetPageId)addMemoDrawingFiles(files,memoDrawingTargetPageId)};
 $("#siteName").oninput=save;$("#siteDate").onchange=save;$("#roomPrevBtn").onclick=()=>moveActiveRoom(-1);
 $("#roomNextBtn").onclick=()=>moveActiveRoom(1);
 $("#editBtn").onclick=()=>{$("#calcView").classList.remove("active");$("#editView").classList.remove("hidden");$("#editBtn").classList.add("primary");$("#calcBtn").classList.remove("primary");updateRoomSideNav()};
