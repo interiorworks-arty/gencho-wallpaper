@@ -1215,6 +1215,37 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .calc-selection-bar button:disabled{opacity:.4}
 .calc-selection-bar.has-selection{border-color:#bfb4ac}
 
+/* v2.4.94 部屋別：①〜⑩の独立計算・重複防止 */
+.calc-room-item-select>.calc-title{
+  width:100%;border:0;background:transparent;padding:7px 8px;color:inherit;
+  text-align:left;border-radius:9px;touch-action:manipulation;font:inherit;
+}
+.calc-room-title-main{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%}
+.calc-room-title-left{display:flex;align-items:center;gap:8px;min-width:0}
+.calc-room-badges{display:flex;gap:3px;flex-wrap:wrap}
+.calc-room-badge{display:inline-flex;align-items:center;justify-content:center;min-width:23px;height:23px;padding:0 4px;border-radius:7px;border:1px solid var(--bucket-border);background:var(--bucket-bg);font-size:12px;font-weight:900;color:#4b4540}
+.calc-room-section-select{display:block;width:100%;border:0;background:transparent;text-align:left;padding:6px 0;border-radius:8px;color:inherit;font:inherit;touch-action:manipulation}
+.calc-room-section-select.assigned{padding-left:8px;padding-right:8px;border-left:6px solid var(--bucket-border);background:var(--bucket-bg)}
+.calc-room-section-select .section-row{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.calc-room-section-select .section-row strong{font-size:15px}
+.calc-room-section-select .section-sub{font-size:12px;color:#756e68;margin-top:2px}
+.calc-bucket-panel{margin:0 0 10px}
+.calc-bucket-grid{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:5px}
+.calc-bucket-btn{border:1px solid #d5cdc7;border-radius:10px;background:#f4f1ee;min-height:44px;padding:4px 2px;font-size:22px;font-weight:900;color:#5c554f;touch-action:manipulation}
+.calc-bucket-btn.active{outline:3px solid #6c625a;outline-offset:1px}
+.calc-bucket-btn.has-selection{background:var(--bucket-bg);border-color:var(--bucket-border)}
+.calc-bucket-help{font-size:10px;color:#8b837d;margin:7px 2px 0}
+.calc-selection-bar.calc-bucket-total{border-color:var(--bucket-border);background:var(--bucket-bg)}
+.calc-selection-bar.calc-bucket-total .calc-bucket-total-label{display:flex;align-items:baseline;gap:10px}
+.calc-selection-bar.calc-bucket-total .calc-bucket-total-label b{font-size:24px}
+.calc-selection-bar.calc-bucket-total .calc-bucket-total-label span{font-size:13px;color:#665f59}
+.calc-selection-actions{display:flex;gap:8px;align-items:center}
+@media(max-width:700px){
+  .calc-bucket-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .calc-selection-bar.calc-bucket-total{align-items:flex-start}
+  .calc-selection-actions{flex-direction:column;align-items:stretch}
+}
+
 
 .cut-result{font-size:18px;font-weight:750;color:#8b837d;white-space:nowrap;min-height:24px;font-variant-numeric:tabular-nums;text-align:left}.cut-difference{font-size:18px;font-weight:750;color:#8b837d;white-space:nowrap;min-height:24px;font-variant-numeric:tabular-nums;text-align:center}.line-result{text-align:right}
 @media(max-width:620px){
@@ -1641,9 +1672,10 @@ header .room-actions .site-list-btn{
   .glue-summary-box strong{font-size:15px}
   .glue-page-reset{flex:0 0 auto;max-width:72px;padding:5px 6px;font-size:9px;white-space:normal}
 }
+/* v1.0.6 公開版：統合版の部屋別①〜⑩・品番未定発注・集計出力を同期 */
 </style>
 </head>
-<body data-build="wall-v1.0.2">
+<body data-build="wall-v1.0.6">
 <header><div class="header-row"><div><div class="title">クロス屋</div><div class="tag">クロス職人の現調・糊付け・発注。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -3678,6 +3710,18 @@ function orderDisplayIdentity(item){
   return null;
 }
 
+function orderItemHasQuantity(item){
+  const kind=item.kind||item.type||"";
+  const cuts=(item.orderCuts||[]);
+  if(cuts.some(x=>(Number(x.length)||0)>0&&(Number(x.count)||0)>0))return true;
+  if(kind==="フロアタイル"){
+    if(item.saleMode==="loose")return (Number(item.pieces)||0)>0;
+    return (Number(item.area)||0)>0;
+  }
+  if(kind==="ソフト巾木")return (Number(item.qty)||0)>0;
+  return (Number(item.qty)||0)>0 || cuts.some(x=>(Number(x.length)||0)>0||(Number(x.count)||0)>0);
+}
+
 function ensureOrderOverrides(siteObj=state){
   if(!siteObj.orderOverrides||typeof siteObj.orderOverrides!=="object"||Array.isArray(siteObj.orderOverrides))siteObj.orderOverrides={};
   return siteObj.orderOverrides;
@@ -3715,11 +3759,13 @@ function collectOrderData(siteObj=state){
   (siteObj.rooms||[]).forEach(r=>{
     const roomByProduct=new Map();
     (r.sections||[]).forEach(sec=>{
-      const product=effectiveWallProduct(sec,siteObj);
-      if(!product)return;
+      const product=String(effectiveWallProduct(sec,siteObj)||"").trim();
       const t=secTotals(sec,siteObj);
       if(!t.withR)return;
-      roomByProduct.set(product,(roomByProduct.get(product)||0)+t.withR);
+      // 品番が未入力でも採寸数量があれば発注対象にする。
+      // 後から品番を入力した時は通常の品番別集計へ自動で切り替わる。
+      const orderProduct=product||"品番未定";
+      roomByProduct.set(orderProduct,(roomByProduct.get(orderProduct)||0)+t.withR);
     });
     roomByProduct.forEach((roomQty,product)=>{
       if(!wallMap.has(product))wallMap.set(product,{name:product,product:"",qty:0,rooms:[],roomTotals:[]});
@@ -3744,11 +3790,15 @@ function collectOrderData(siteObj=state){
   const finishMap={floor:new Map(),sheet:new Map(),other:new Map()};
 
   (siteObj.finishRooms||[]).forEach(r=>(r.finishMaterials||[]).forEach(item=>{
-    const id=orderDisplayIdentity(item);
-    if(!id)return;
-    const page=item.page||finishPageFromKind(item.kind||item.type);
-    if(!finishMap[page])return;
     const kind=item.kind||item.type;
+    const rawId=orderDisplayIdentity(item);
+    const hasQty=orderItemHasQuantity(item);
+    const id=rawId
+      ? {name:rawId.name||kind||"商品",product:rawId.product||(hasQty?"品番未定":"")}
+      : (hasQty?{name:kind||"商品",product:"品番未定"}:null);
+    if(!id)return;
+    const page=item.page||finishPageFromKind(kind);
+    if(!finishMap[page])return;
     let mode="qty", keyExtra="", qtyNum=0, unit="", detail="", cuts=[];
 
     if(kind==="CF"||kind==="リアテック"||kind==="ダイノック"){
@@ -5023,6 +5073,100 @@ function sectionGroups(siteObj=state){
   return order.filter(name=>map.has(name)).map(name=>[name,map.get(name)]);
 }
 
+const CALC_BUCKET_MAX=10;
+const CALC_BUCKET_LABELS=["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩"];
+const CALC_BUCKET_COLORS=[
+  {bg:"#dcebe3",border:"#9dbdac"},
+  {bg:"#dde3f2",border:"#a5b1d4"},
+  {bg:"#f3e1cf",border:"#d1ad83"},
+  {bg:"#eadcf1",border:"#baa2ca"},
+  {bg:"#d9ecec",border:"#9fc9c9"},
+  {bg:"#f1dbe1",border:"#caa5af"},
+  {bg:"#ebe6d4",border:"#c1b58b"},
+  {bg:"#d9e2eb",border:"#9fb2c4"},
+  {bg:"#efe4d7",border:"#c8b096"},
+  {bg:"#e2dddd",border:"#b9a9a9"}
+];
+const calcRoomBuckets=Array.from({length:CALC_BUCKET_MAX},()=>({sections:new Set()}));
+let activeCalcBucket=0,calcBucketLoadedSiteId=null;
+function loadCalcBucketsForSite(siteObj=state){
+  const sid=String(siteObj?.id||"");
+  if(calcBucketLoadedSiteId===sid)return;
+  calcRoomBuckets.forEach(b=>b.sections.clear());
+  const saved=Array.isArray(siteObj?.calcBuckets)?siteObj.calcBuckets:[];
+  saved.slice(0,CALC_BUCKET_MAX).forEach((arr,i)=>{
+    if(Array.isArray(arr))arr.forEach(k=>calcRoomBuckets[i].sections.add(String(k)));
+  });
+  activeCalcBucket=Math.max(0,Math.min(CALC_BUCKET_MAX-1,Number(siteObj?.activeCalcBucket)||0));
+  calcBucketLoadedSiteId=sid;
+}
+function saveCalcBucketsToSite(){
+  if(!state)return;
+  state.calcBuckets=calcRoomBuckets.map(b=>[...b.sections]);
+  state.activeCalcBucket=activeCalcBucket;
+}
+function persistCalcBuckets(){saveCalcBucketsToSite();persistSites()}
+function roomSectionKey(r,s){return `${r.id||r.name}|${s.id||s.name}`}
+function bucketColor(index){return CALC_BUCKET_COLORS[index%CALC_BUCKET_COLORS.length]}
+function bucketStyle(index){const c=bucketColor(index);return `--bucket-bg:${c.bg};--bucket-border:${c.border};`}
+function roomSelectionSnapshot(siteObj=state){
+  if(siteObj===state)loadCalcBucketsForSite(siteObj);
+  const rooms=siteObj.rooms||[];
+  const validSections=new Set();
+  rooms.forEach(r=>(r.sections||[]).forEach(s=>validSections.add(roomSectionKey(r,s))));
+  calcRoomBuckets.forEach(bucket=>[...bucket.sections].forEach(k=>{if(!validSections.has(k))bucket.sections.delete(k)}));
+  return rooms;
+}
+function getSectionAssignedBucket(key){
+  for(let i=0;i<calcRoomBuckets.length;i++)if(calcRoomBuckets[i].sections.has(key))return i;
+  return -1;
+}
+function selectedSectionsForRoom(r){
+  const out=[];
+  (r.sections||[]).forEach(s=>{
+    const t=secTotals(s,state);if(!t.none&&!t.withR)return;
+    const key=roomSectionKey(r,s),bucket=getSectionAssignedBucket(key);
+    if(bucket>-1)out.push({key,bucket,s});
+  });
+  return out;
+}
+function roomBucketTotals(bucketIndex,siteObj=state){
+  const bucket=calcRoomBuckets[bucketIndex];
+  let none=0,withR=0,sectionCount=0;
+  const roomIds=new Set();
+  roomSelectionSnapshot(siteObj).forEach(r=>{
+    (r.sections||[]).forEach(s=>{
+      const t=secTotals(s,siteObj);if(!t.none&&!t.withR)return;
+      const key=roomSectionKey(r,s);
+      if(bucket.sections.has(key)){
+        none+=t.none;withR+=t.withR;sectionCount++;roomIds.add(String(r.id||r.name));
+      }
+    });
+  });
+  return {none,withR,roomCount:roomIds.size,sectionCount,count:sectionCount};
+}
+function roomSelectionTotals(siteObj=state){return roomBucketTotals(activeCalcBucket,siteObj)}
+function setActiveCalcBucket(index){activeCalcBucket=Math.max(0,Math.min(CALC_BUCKET_MAX-1,Number(index)||0));saveCalcBucketsToSite();persistSites();buildCalc()}
+function toggleRoomSelection(roomId){
+  const room=(state.rooms||[]).find(r=>String(r.id)===String(roomId));if(!room)return;
+  const bucket=calcRoomBuckets[activeCalcBucket];
+  const candidates=(room.sections||[]).filter(s=>{const t=secTotals(s,state);return !!(t.none||t.withR)});
+  const activeKeys=candidates.map(s=>roomSectionKey(room,s)).filter(k=>bucket.sections.has(k));
+  const unassignedKeys=candidates.map(s=>roomSectionKey(room,s)).filter(k=>getSectionAssignedBucket(k)===-1);
+  if(unassignedKeys.length){unassignedKeys.forEach(k=>bucket.sections.add(k));}
+  else if(activeKeys.length){activeKeys.forEach(k=>bucket.sections.delete(k));}
+  persistCalcBuckets();buildCalc();
+}
+function toggleRoomSectionSelection(key){
+  const assigned=getSectionAssignedBucket(key),bucket=calcRoomBuckets[activeCalcBucket];
+  if(assigned===activeCalcBucket)bucket.sections.delete(key);
+  else if(assigned===-1)bucket.sections.add(key);
+  // 他の計算に入っている区分は移動しない。元の計算で解除してから選ぶ。
+  persistCalcBuckets();buildCalc();
+}
+function clearRoomSelection(){calcRoomBuckets[activeCalcBucket].sections.clear();persistCalcBuckets();buildCalc()}
+function clearAllRoomSelections(){calcRoomBuckets.forEach(bucket=>bucket.sections.clear());persistCalcBuckets();buildCalc()}
+
 const calcSectionSelection=new Set();
 
 function sectionSelectionSnapshot(siteObj=state){
@@ -5055,15 +5199,24 @@ function clearSectionSelection(){calcSectionSelection.clear();buildCalc()}
 function buildCalc(){
   let html="";
   if(calcMode==="room"){
-    state.rooms.forEach(r=>{
-      let rt=roomTotals(r);
-      html+=`<div class="calc-item"><div class="calc-title"><span>${esc(r.name)}</span><span>${fmt(rt.withR)}</span></div>`;
+    const bucketButtons=calcRoomBuckets.map((bucket,idx)=>{
+      const t=roomBucketTotals(idx,state);
+      return `<button type="button" class="calc-bucket-btn${idx===activeCalcBucket?" active":""}${t.count?" has-selection":""}" data-calc-bucket="${idx}" style="${bucketStyle(idx)}" aria-label="計算${idx+1}">${CALC_BUCKET_LABELS[idx]}</button>`;
+    }).join("");
+    html+=`<div class="calc-bucket-panel"><div class="calc-bucket-grid">${bucketButtons}</div><div class="calc-bucket-help">色が付いている区分は選択済みです。別の計算で選択済みの区分は重複加算しません。</div></div>`;
+    roomSelectionSnapshot(state).forEach(r=>{
+      const rt=roomTotals(r);
+      const used=[...new Set(selectedSectionsForRoom(r).map(x=>x.bucket))].sort((a,b)=>a-b);
+      const badges=used.map(i=>`<span class="calc-room-badge" style="${bucketStyle(i)}">${CALC_BUCKET_LABELS[i]}</span>`).join("");
+      html+=`<div class="calc-item calc-room-item-select"><button type="button" class="calc-title" data-calc-room-id="${esc(String(r.id))}"><span class="calc-room-title-main"><span class="calc-room-title-left"><b>${esc(r.name)}</b><span class="calc-room-badges">${badges}</span></span><strong>${fmt(rt.withR)}</strong></span></button>`;
       r.sections.forEach(s=>{
-        let t=secTotals(s,state);if(!t.none&&!t.withR)return;
-        html+=`<div class="calc-sub"><b>${esc(s.name)}</b>${effectiveWallProduct(s,state)?"　"+esc(effectiveWallProduct(s,state)):""}${effectiveWallRepeatV(s,state)?"　↕︎"+esc(effectiveWallRepeatV(s,state)):""}${effectiveWallRepeatH(s,state)?"　↔︎"+esc(effectiveWallRepeatH(s,state)):""}<br>リピートなし ${fmt(t.none)} ／ リピートあり ${fmt(t.withR)}`;
-        let ds=s.measures.map(m=>{
-          let c=calc(m.value,effectiveWallRepeatV(s,state));if(!c)return"";
-          let detail=c.r?(c.star?`${c.len}+${c.r}=${c.each}`:`${c.len}→${c.each}`):`${c.len}`;
+        const t=secTotals(s,state);if(!t.none&&!t.withR)return;
+        const sk=roomSectionKey(r,s),sectionBucket=getSectionAssignedBucket(sk),assigned=sectionBucket>-1;
+        const meta=[effectiveWallProduct(s,state),effectiveWallRepeatV(s,state)?`↕︎${effectiveWallRepeatV(s,state)}`:"",effectiveWallRepeatH(s,state)?`↔︎${effectiveWallRepeatH(s,state)}`:""].filter(Boolean).join("　");
+        html+=`<div class="calc-sub"><button type="button" class="calc-room-section-select${assigned?" assigned":""}" ${assigned?`style="${bucketStyle(sectionBucket)}"`:""} data-calc-room-section-key="${esc(sk)}"><div class="section-row"><b>${esc(s.name)}${meta?"　"+esc(meta):""}</b><strong>${fmt(t.withR)}</strong></div><div class="section-sub">リピートなし ${fmt(t.none)} ／ リピートあり ${fmt(t.withR)}${assigned?`　/　${CALC_BUCKET_LABELS[sectionBucket]}選択済み`:""}</div></button>`;
+        const ds=s.measures.map(m=>{
+          const c=calc(m.value,effectiveWallRepeatV(s,state));if(!c)return"";
+          const detail=c.r?(c.star?`${c.len}+${c.r}=${c.each}`:`${c.len}→${c.each}`):`${c.len}`;
           return`${esc(m.value)}　${detail} × ${c.qty} = ${fmt(c.withM)}`;
         }).filter(Boolean);
         if(ds.length)html+=`<details><summary>計算詳細</summary>${ds.join("<br>")}</details>`;
@@ -5071,6 +5224,8 @@ function buildCalc(){
       });
       html+="</div>";
     });
+    const rt=roomSelectionTotals(state);
+    html+=`<div class="calc-selection-bar calc-bucket-total${rt.count?" has-selection":""}" style="${bucketStyle(activeCalcBucket)}"><div><div class="calc-bucket-total-label"><b>${CALC_BUCKET_LABELS[activeCalcBucket]}</b><span>合計</span><strong>${fmt(rt.withR)}</strong></div><small>リピートなし ${fmt(rt.none)}　/　${rt.roomCount}部屋・${rt.sectionCount}区分</small></div><div class="calc-selection-actions"><button type="button" id="clearRoomSelection" ${rt.count?"":"disabled"}>この計算をクリア</button><button type="button" id="clearAllRoomSelections">全部クリア</button></div></div>`;
   }else if(calcMode==="product"){
     let g={};
     state.rooms.forEach(r=>r.sections.forEach(s=>{
@@ -5107,7 +5262,14 @@ function buildCalc(){
   html+=`<div class="calc-item"><div>現場合計</div><div class="grand">リピートあり ${fmt(gw)}</div><div class="calc-sub">リピートなし ${fmt(gn)}</div></div>`;
   const calcContent=$("#calcContent");
   calcContent.innerHTML=html;
-  calcContent.classList.toggle("calc-content-section-select",calcMode==="section");
+  calcContent.classList.toggle("calc-content-section-select",calcMode==="section"||calcMode==="room");
+  if(calcMode==="room"){
+    calcContent.querySelectorAll("[data-calc-bucket]").forEach(btn=>{btn.onclick=()=>setActiveCalcBucket(btn.dataset.calcBucket)});
+    calcContent.querySelectorAll("[data-calc-room-id]").forEach(btn=>{btn.onclick=()=>toggleRoomSelection(btn.dataset.calcRoomId)});
+    calcContent.querySelectorAll("[data-calc-room-section-key]").forEach(btn=>{btn.onclick=()=>toggleRoomSectionSelection(btn.dataset.calcRoomSectionKey)});
+    const clear=calcContent.querySelector("#clearRoomSelection");if(clear)clear.onclick=clearRoomSelection;
+    const clearAll=calcContent.querySelector("#clearAllRoomSelections");if(clearAll)clearAll.onclick=clearAllRoomSelections;
+  }
   if(calcMode==="section"){
     calcContent.querySelectorAll(".calc-section-select").forEach(btn=>{
       btn.onclick=()=>toggleSectionSelection(btn.dataset.sectionName);
@@ -5426,10 +5588,13 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
         withR:t.withR,
         subs:(r.sections||[]).map(s=>{
           const x=secTotals(s,siteObj);
-          return (!x.none&&!x.withR)?null:{
+          if(!x.none&&!x.withR)return null;
+          const key=roomSectionKey(r,s),bucket=getSectionAssignedBucket(key);
+          return {
             label:`${s.name}${effectiveWallProduct(s,siteObj)?"　"+effectiveWallProduct(s,siteObj):""}${effectiveWallRepeatV(s,siteObj)?"　↕"+effectiveWallRepeatV(s,siteObj):""}${effectiveWallRepeatH(s,siteObj)?"　↔"+effectiveWallRepeatH(s,siteObj):""}`,
             none:x.none,
-            withR:x.withR
+            withR:x.withR,
+            bucket
           };
         }).filter(Boolean)
       });
@@ -5440,11 +5605,7 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
         title:p,
         none:x.none,
         withR:x.withR,
-        subs:x.items.map(i=>({
-          label:`${i.room}　${i.section}`,
-          none:i.none,
-          withR:i.withR
-        }))
+        subs:x.items.map(i=>({label:`${i.room}　${i.section}`,none:i.none,withR:i.withR}))
       });
     });
   }else{
@@ -5462,10 +5623,13 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
     });
   }
 
+  const bucketSummaries=mode==="room"?calcRoomBuckets.map((_,i)=>({i,...roomBucketTotals(i,siteObj)})).filter(x=>x.count):[];
+  const bucketSummaryRows=bucketSummaries.length?Math.ceil(bucketSummaries.length/5):0;
+  const bucketSummaryH=bucketSummaryRows?bucketSummaryRows*92+20:0;
   const subCount=rows.reduce((n,r)=>n+r.subs.length,0);
   const rowBase=118;
-  const subH=36;
-  const height=Math.max(900,290+rows.length*rowBase+subCount*subH+190);
+  const subH=mode==="room"?48:36;
+  const height=Math.max(900,290+bucketSummaryH+rows.length*rowBase+subCount*subH+190);
 
   const c=document.createElement("canvas");
   const ctx=c.getContext("2d");
@@ -5474,6 +5638,8 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
   roundedRect(ctx,56,56,width-112,height-112,28,"#fff");
 
   let y=128;
+  const pdfBreaks=[];
+  const markPdfBreak=()=>{const v=Math.round(y);if(v>120&&!pdfBreaks.includes(v))pdfBreaks.push(v)};
   ctx.fillStyle="#8f8882";
   ctx.font='600 25px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
   ctx.fillText(siteObj.siteName||"現場名未入力",pad+25,y);
@@ -5487,55 +5653,108 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
   ctx.strokeStyle="#ddd7d2";ctx.lineWidth=2;
   ctx.beginPath();ctx.moveTo(pad+25,y);ctx.lineTo(width-pad-25,y);ctx.stroke();
   y+=45;
+  markPdfBreak();
+
+  if(mode==="room"&&bucketSummaries.length){
+    ctx.fillStyle="#5e5751";
+    ctx.font='800 23px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+    ctx.fillText("色分け計算合計",pad+35,y);
+    y+=26;
+    const gap=12,cols=5,cardW=(inner-70-gap*(cols-1))/cols,cardH=76;
+    bucketSummaries.forEach((b,idx)=>{
+      const row=Math.floor(idx/cols),col=idx%cols;
+      const x=pad+35+col*(cardW+gap),cy=y+row*(cardH+16);
+      const bc=bucketColor(b.i);
+      roundedRect(ctx,x,cy,cardW,cardH,15,bc.bg);
+      ctx.strokeStyle=bc.border;ctx.lineWidth=3;ctx.stroke();
+      ctx.fillStyle="#393532";ctx.font='800 24px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+      ctx.fillText(CALC_BUCKET_LABELS[b.i],x+14,cy+27);
+      ctx.font='800 23px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+      ctx.fillText(fmt(b.withR),x+48,cy+27);
+      ctx.fillStyle="#6c655f";ctx.font='600 14px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+      ctx.fillText(`↕なし ${fmt(b.none)} / ${b.roomCount}部屋・${b.sectionCount}区分`,x+14,cy+55);
+    });
+    y+=bucketSummaryRows*(cardH+16)+8;
+    ctx.strokeStyle="#eee6e1";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(pad+25,y);ctx.lineTo(width-pad-25,y);ctx.stroke();
+    y+=34;
+    markPdfBreak();
+  }
 
   rows.forEach(row=>{
     ctx.fillStyle="#272522";
     ctx.font='800 29px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
     ctx.fillText(row.title,pad+35,y);
-    ctx.textAlign="right";
-    ctx.fillText(fmt(row.withR),width-pad-35,y);
-    ctx.textAlign="left";
+    if(mode==="room"){
+      const used=[...new Set(row.subs.map(s=>s.bucket).filter(b=>b>=0))].sort((a,b)=>a-b);
+      let bx=pad+300;
+      used.forEach(b=>{
+        const bc=bucketColor(b);
+        roundedRect(ctx,bx,y-26,38,32,10,bc.bg);
+        ctx.strokeStyle=bc.border;ctx.lineWidth=2;ctx.stroke();
+        ctx.fillStyle="#3f3a36";ctx.font='800 18px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+        ctx.fillText(CALC_BUCKET_LABELS[b],bx+8,y-4);bx+=46;
+      });
+    }
+    ctx.fillStyle="#272522";ctx.font='800 29px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+    ctx.textAlign="right";ctx.fillText(fmt(row.withR),width-pad-35,y);ctx.textAlign="left";
     y+=39;
 
     row.subs.forEach(s=>{
-      ctx.fillStyle="#766f69";
-      ctx.font='600 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-      ctx.fillText(`${s.label}：${fmt(s.withR)}`,pad+35,y);
-      y+=36;
+      const hasBucket=mode==="room"&&Number.isInteger(s.bucket)&&s.bucket>=0;
+      if(hasBucket){
+        const bc=bucketColor(s.bucket);
+        roundedRect(ctx,pad+28,y-25,inner-56,39,10,bc.bg);
+        ctx.strokeStyle=bc.border;ctx.lineWidth=2;ctx.stroke();
+        ctx.fillStyle="#3f3a36";
+        ctx.font='700 19px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+        ctx.fillText(`${CALC_BUCKET_LABELS[s.bucket]}  ${s.label}`,pad+42,y);
+      }else{
+        ctx.fillStyle="#766f69";
+        ctx.font='600 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+        ctx.fillText(`${s.label}：${fmt(s.withR)}`,pad+35,y);
+      }
+      if(hasBucket){
+        ctx.textAlign="right";ctx.fillText(fmt(s.withR),width-pad-45,y);ctx.textAlign="left";
+      }
+      y+=subH;
+      markPdfBreak();
     });
 
     ctx.fillStyle="#665f59";
     ctx.font='700 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
     ctx.fillText(`リピートなし ${fmt(row.none)} ／ リピートあり ${fmt(row.withR)}`,pad+35,y);
     y+=34;
-
-    ctx.strokeStyle="#eee6e1";
-    ctx.lineWidth=2;
-    ctx.beginPath();ctx.moveTo(pad+35,y);ctx.lineTo(width-pad-35,y);ctx.stroke();
+    ctx.strokeStyle="#eee6e1";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(pad+35,y);ctx.lineTo(width-pad-35,y);ctx.stroke();
     y+=34;
+    markPdfBreak();
   });
 
   const total=siteTotals(siteObj);
   roundedRect(ctx,pad+25,y,inner-50,112,20,"#efebe8");
-  ctx.fillStyle="#766f69";
-  ctx.font='700 21px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-  ctx.fillText("現場合計",pad+50,y+34);
-
-  ctx.fillStyle="#272522";
-  ctx.font='800 29px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-  ctx.fillText(`リピートあり ${fmt(total.withR)}`,pad+50,y+78);
-  ctx.fillStyle="#766f69";
-  ctx.font='600 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-  ctx.fillText(`リピートなし ${fmt(total.none)}`,pad+50,y+104);
-
+  ctx.fillStyle="#766f69";ctx.font='700 21px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';ctx.fillText("現場合計",pad+50,y+34);
+  ctx.fillStyle="#272522";ctx.font='800 29px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';ctx.fillText(`リピートあり ${fmt(total.withR)}`,pad+50,y+78);
+  ctx.fillStyle="#766f69";ctx.font='600 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';ctx.fillText(`リピートなし ${fmt(total.none)}`,pad+50,y+104);
+  y+=126;markPdfBreak();
+  c._pdfBreaks=pdfBreaks;
   return c;
 }
 async function canvasToPdfJpegs(canvas){
   const pageRatio=841.89/595.28;
   const sliceH=Math.max(1,Math.floor(canvas.width*pageRatio));
+  const breaks=Array.isArray(canvas._pdfBreaks)?canvas._pdfBreaks.filter(v=>Number.isFinite(v)&&v>0&&v<canvas.height).sort((a,b)=>a-b):[];
   const out=[];
-  for(let sy=0;sy<canvas.height;sy+=sliceH){
-    const h=Math.min(sliceH,canvas.height-sy),page=document.createElement("canvas");page.width=canvas.width;page.height=h;const x=page.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,page.width,page.height);x.drawImage(canvas,0,sy,canvas.width,h,0,0,canvas.width,h);out.push(await canvasToJpegInfo(page));
+  let sy=0;
+  while(sy<canvas.height){
+    const naturalEnd=Math.min(canvas.height,sy+sliceH);
+    let end=naturalEnd;
+    if(naturalEnd<canvas.height&&breaks.length){
+      const minUseful=sy+Math.floor(sliceH*0.45);
+      const candidates=breaks.filter(v=>v>minUseful&&v<=naturalEnd);
+      if(candidates.length)end=candidates[candidates.length-1];
+    }
+    if(end<=sy)end=naturalEnd;
+    const h=end-sy,page=document.createElement("canvas");page.width=canvas.width;page.height=h;const x=page.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,page.width,page.height);x.drawImage(canvas,0,sy,canvas.width,h,0,0,canvas.width,h);out.push(await canvasToJpegInfo(page));
+    sy=end;
   }
   return out;
 }
